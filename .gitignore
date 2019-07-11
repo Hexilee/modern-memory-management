@@ -1,0 +1,10 @@
+# bazel
+bazel-*/
+
+
+# cargo
+Cargo.lock
+target/
+
+# idea
+.idea/
