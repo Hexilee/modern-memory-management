@@ -72,8 +72,60 @@ a._data = 1
 
 #### 不可变引用
 
-Cpp 的左值引用又可分为可变引用（`T&`）和不可变引用（`const T&`）两种。不可变引用同时约束了引用的绑定不可变和内部不可变：
+Cpp 的左值引用又可分为可变引用（`T&`）和不可变引用（`const T&`）两种。不可变引用约束了引用的内部不可变：
 
+```cpp
+// [cpp] bazel run //reference:const_ref
+
+class B {
+    A _a;
+  public:
+    explicit B(int data) : _a(data) {}
+    
+    auto a() -> const A & {
+        return _a;
+    }
+};
+
+int main() {
+    B b(0);
+    auto & ref_a = b.a();
+    ref_a = A(1);
+    auto & ref_data = ref_a.data();
+    return 0;
+}
+```
+
+编译会得到两个错误：一个是  `no viable overloaded '='` ，因为 `ref_a` 的类型是 `const A&` 而 `A` 默认的移动赋值函数的 `this` 并没有标记为 `const`；第二个错误也是差不多的原因：`A` 的方法 `auto data() -> int &` 的 `this` 并没有标记为 `const`.
+
+我们再给 `A` 加一个 `const_data 方法`:
+
+```cpp
+auto const_data() const -> const int & {
+    return _data;
+}
+```
+
+> 两个 `const` 分别标记 `this` 和返回引用的类型
+
+我们现在可以也只能拿到 `_data` 的不可变引用
+
+```cpp
+// [cpp] bazel run //reference:const_ref_and_data
+
+int main() {
+    B b(0);
+    auto & ref_data = b.a().const_data();
+    ref_data = 1;
+    return 0;
+}
+```
+
+这段代码会炸在赋值的地方
+
+### Rust
+
+#### Cpp 没解决的问题
 
 # 引用、拷贝、移动和智能指针
 

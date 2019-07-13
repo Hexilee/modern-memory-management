@@ -32,3 +32,21 @@ cc_binary(
         'structures'
     ]
 )
+
+cc_binary(
+    name = 'const_ref',
+    srcs = ['const_ref.cpp'],
+    copts = ["-std=c++11"],
+    deps = [
+        'structures'
+    ]
+)
+
+cc_binary(
+    name = 'const_ref_and_data',
+    srcs = ['const_ref_and_data.cpp'],
+    copts = ["-std=c++11"],
+    deps = [
+        'structures'
+    ]
+)
