@@ -50,3 +50,12 @@ cc_binary(
         'structures'
     ]
 )
+
+cc_binary(
+    name = 'ref_dangling',
+    srcs = ['ref_dangling.cpp'],
+    copts = ["-std=c++14"],
+    deps = [
+        'structures'
+    ]
+)

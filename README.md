@@ -6,7 +6,7 @@ Rust 自诞生起就以它独特、现代化的内存管理机制闻名于世；
 
 ### Cpp
 
-首先讲 Cpp 的引用，我们都知道 Cpp 分为左值（lvalue）引用和右值（rvalue）引用，这一部分我们主要讨论左值引用（右值引用应该放到后面的移动那一部分讲）。
+首先讲 Cpp 的引用，我们都知道 Cpp 里引用分为左值（lvalue）引用和右值（rvalue）引用，在这一部分我们主要讨论左值引用（右值引用应该放到后面的移动那一部分讲）。
 
 #### 左值引用
 
@@ -121,11 +121,57 @@ int main() {
 }
 ```
 
-这段代码会炸在赋值的地方
+这段代码会炸在赋值的地方。
 
 ### Rust
 
 #### Cpp 没解决的问题
+
+Cpp 的引用固然在减少拷贝、控制可变性上做得很不错，但依旧存在两个明显的问题
+
+- 引用可能比对象本身活得更长。
+- 可能同时持有对同一对象的多个可变引用，不能静态检查到潜在的数据竞争。
+
+第一个问题的例子：
+
+```cpp
+// [cpp] bazel run //reference:ref_dangling 
+class C {
+    int _id;
+  public:
+    explicit C(int id) : _id(id) {}
+    
+    ~C() {
+        std::cout << "C(id=" << _id << ") destructed" << std::endl;
+    }
+    
+    auto id() -> int & {
+        return _id;
+    }
+};
+
+decltype(auto) get_data() {
+    return C(0).id();
+}
+
+int main() {
+    decltype(auto) ref_data = get_data();
+    std::cout << "id=" << ref_data << std::endl;
+}
+```
+
+打印出来的结果
+
+```bash
+C(id=0) destructed
+id=-1840470160
+```
+
+第二个问题的例子（略）
+
+#### 引用的生命周期
+
+#### 引用的可变性约束
 
 # 引用、拷贝、移动和智能指针
 

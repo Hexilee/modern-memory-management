@@ -4,6 +4,7 @@
 
 #ifndef CPP_STRUCTURES_HPP
 #define CPP_STRUCTURES_HPP
+#include <iostream>
 
 class A {
     int _data;
@@ -26,6 +27,20 @@ class B {
     
     auto a() -> const A & {
         return _a;
+    }
+};
+
+class C {
+    int _id;
+  public:
+    explicit C(int id) : _id(id) {}
+    
+    ~C() {
+        std::cout << "C(id=" << _id << ") destructed" << std::endl;
+    }
+    
+    auto id() -> int & {
+        return _id;
     }
 };
 
