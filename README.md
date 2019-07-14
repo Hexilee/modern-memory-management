@@ -125,7 +125,7 @@ int main() {
 
 ### Rust
 
-#### Cpp 没解决的问题
+#### Cpp 引用没解决的问题
 
 Cpp 的引用固然在减少拷贝、控制可变性上做得很不错，但依旧存在两个明显的问题
 
@@ -169,9 +169,114 @@ id=-1840470160
 
 第二个问题的例子（略）
 
-#### 引用的生命周期
+#### 引用的生命期
+
+下面是 Rust 引用的用例
+
+```rust
+// [rust] cargo run --example mutable_ref 
+
+struct A {
+    _data: i32,
+}
+
+impl A {
+    fn new(data: i32) -> Self {
+        A { _data: data }
+    }
+
+    fn data(&self) -> &i32{
+        &self._data
+    }
+
+    fn mut_data(&mut self) -> &mut i32{
+        &mut self._data
+    }
+}
+
+fn main() {
+    let mut a = A::new(0);
+    let data = a.mut_data();
+    *data = 1;
+    println!("a._data={}", data);
+}
+```
+
+> Rust 中对象和引用默认都是不可变的，需要用 `mut` 限定词来使其可变，这与 Cpp 刚好相反。
+
+Rust 的引用同样也分可变引用和不可变引用，Cpp 中对不可变引用的约束 Rust 也全部涵盖了；并且我们可以注意到，不同于 Cpp 中作为变量别名的引用，Rust 中的引用更像是指针，很多场景下都需要显式地取引用（`&`）和解引用（`*`）。
+
+> Rust 中不能直接拿到裸指针。
+
+看完这个例子后我们继续刚才话题， 第一个问题，Rust 的引用可能比对象本身活得更长吗？答案是不能（在不使用 Unsafe Rust 的情况下）。只要程序过了编译，Rust 能永远保证引用有效。
+
+比如这个程序：
+
+```rust
+// [rust] cargo run --example ref_dangling
+
+fn get_data() -> &i32 {
+    let a = A::new(0);
+    a.data()
+}
+
+fn main() {
+    println!("a._data={}", get_data());
+}
+```
+
+编译失败 `missing lifetime specifier`，这是因为 Rust 的引用都有自己的生命期（lifetime）。在一般情况下，Rust 编译器能自己推导出生命期，比如当参数和返回值各只有一个生命期时，编译器会认为返回值的生命期与参数一致（返回引用依赖参数引用）：
+
+```rust
+// [rust] cargo run --example lifetime_infer
+
+fn get_data(a: &A) -> &i32 {
+    a.data()
+}
+
+fn main() {
+    println!("a._data={}", get_data(&A::new(0)));
+}
+```
+
+编译器会认为 `get_data` 返回的 `&i32` 依赖参数 `a`；同时对于 `data` 方法
+
+```rust
+struct A {
+    _data: i32,
+}
+
+impl A {
+    fn data(&self) -> &i32{
+        &self._data
+    }
+}
+```
+
+返回的 `&i32` 依赖参数 `self`，所以编译器认为这个依赖链没问题，编译通过。
+
+但如果依赖链有问题的话，比如
+
+```rust
+// [rust] cargo run --example failed_infer
+
+fn get_data(a: &A) -> &i32 {
+    let data = 1;
+    &data
+}
+
+fn main() {
+    println!("a._data={}", get_data(&A::new(0)));
+}
+```
+
+`get_data` 返回的 `&i32` 和参数 `a` 并没有关系，引用栈变量，拒绝编译。
+
+当然对于更复杂的情况有其它的推导规则，有时也需要手动标记，有兴趣的读者可参考 Rust 的官方文档。
 
 #### 引用的可变性约束
+
+Rust 的引用声明周期可以解决上文提到的第一个问题，那第二个呢？
 
 # 引用、拷贝、移动和智能指针
 

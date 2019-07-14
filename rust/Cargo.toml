@@ -1,5 +1,5 @@
 [package]
-name = "memory-management"
+name = "modern-memory-management"
 version = "0.1.0"
 authors = ["Hexilee <hexileee@gmail.com>"]
 edition = "2018"
