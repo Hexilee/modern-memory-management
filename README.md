@@ -123,9 +123,8 @@ int main() {
 
 这段代码会炸在赋值的地方。
 
-### Rust
 
-#### Cpp 引用没解决的问题
+#### 没解决的问题
 
 Cpp 的引用固然在减少拷贝、控制可变性上做得很不错，但依旧存在两个明显的问题
 
@@ -168,6 +167,8 @@ id=-1840470160
 ```
 
 第二个问题的例子（略）
+
+### Rust
 
 #### 引用的生命期
 
@@ -365,7 +366,7 @@ auto set_a(A a) {}
 
 auto get_a() {
     A a;
-    return static_cast<A&>(a); // 强制取消返回值优化
+    return static_cast<A&>(a); // 防止返回值优化
 }
 
 int main() {
@@ -401,12 +402,74 @@ Cpp 左值引用本质上是变量别名（alias），即与同一对象绑定�
 
 `std::move` 仅仅是语义上的 move，用于从左值取出右值引用，表示该对象与原来的所有的左值引用解除绑定，move 过后原来所有的左值引用全部失效，不允许再被使用。
 
-而你一旦使用任何变量接收右值引用，这个变量就变成了左值引用，因为**右值引用表示该对象没有与任何变量绑定**。
+正是因为右值引用有着这样的语义，所以移动构造函数和移动赋值运算符可以放心使用右值引用（无变量绑定，移动不影响其它变量）。
+
+而你一旦使用任何变量接收右值引用，这个变量就变成了左值，因为**右值引用不与任何变量绑定**。如果要保证引用在函数之间传递时能“完美转发”（右值引用不会转成左值），可使用 `std::forward`。
 
 ```cpp
+// [cpp] bazel run //move-or-copy:move 
 
+class A {
+  public:
+    A() = default;
+    
+    A(const A &) {
+        std::cout << "call copy constructor" << std::endl;
+    }
+    
+    A(A &&) noexcept {
+        std::cout << "call move constructor" << std::endl;
+    }
+    
+    auto operator=(const A &) -> A & {
+        std::cout << "call copy operator=" << std::endl;
+        return *this;
+    }
+    
+    auto operator=(A &&) noexcept -> A & {
+        std::cout << "call move operator=" << std::endl;
+        return *this;
+    }
+};
+
+auto set_a(A a) {}
+auto copy_ref(A&& a) {
+    A _copy(a); // a 转成了左值
+}
+auto move_ref(A&& a) {
+    A _move(std::forward<A>(a)); // 转发
+}
+int main() {
+    A a;
+    set_a(std::move(a));
+    set_a(static_cast<A&&>(A())); // 防止构造优化
+    copy_ref(A());
+    move_ref(A());
+    return 0;
+}
 ```
 
-正是因为右值引用有着这样的语义，所以移动构造函数和移动赋值函数可以放心使用右值引用（无变量绑定，移动不影响其它变量）
+打印出
+
+```bash
+call move constructor
+call move constructor
+call copy constructor
+call move constructor
+```
+
+#### 为什么需要拷贝和移动
+
+拷贝和移动本质上都是为了保证变量与其绑定的对象生命期一致，这是它们与引用本质上的目的区别，用额外的内存开销换取内存安全。
+
+有时这点额外内存开销是可以忽略不计的，但不是所有时候都这样。减少内存开销的常见做法是堆分配，但堆分配带来的新问题是可能会内存泄漏。
+
+如果使用堆内存分配和（地址）拷贝，就需要想一套方案来决定什么时候回收内存。常见的思路是引用计数或者 [GC](https://en.wikipedia.org/wiki/Garbage_collection_(computer_science))。
+
+但我们可以发现，移动是天然符合 [RAII](https://zh.wikipedia.org/wiki/RAII) 的：堆内存分配，堆内存生命期与栈对象一致（在栈对象析构函数中回收内存）。
+
+比如我们来造一个 `String`：
+
+
 
 

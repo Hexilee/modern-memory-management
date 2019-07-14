@@ -14,3 +14,12 @@ cc_binary(
         'structures'
     ]
 )
+
+cc_binary(
+    name = 'move',
+    srcs = ['move.cpp'],
+    copts = ["-std=c++17"],
+    deps = [
+        'structures'
+    ]
+)
