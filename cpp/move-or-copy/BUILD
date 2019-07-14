@@ -23,3 +23,21 @@ cc_binary(
         'structures'
     ]
 )
+
+cc_binary(
+    name = 'vector',
+    srcs = ["vector.cpp"],
+    copts = ["-std=c++17"],
+    deps = [
+        'structures'
+    ]
+)
+
+cc_binary(
+    name = 'object_moved',
+    srcs = ["object_moved.cpp"],
+    copts = ["-std=c++17"],
+    deps = [
+        'structures'
+    ]
+)

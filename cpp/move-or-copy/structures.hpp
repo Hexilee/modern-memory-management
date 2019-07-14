@@ -29,4 +29,29 @@ class A {
     }
 };
 
+template<typename T>
+class Vector {
+    T *header;
+    size_t capacity;
+    size_t length;
+  public:
+    explicit Vector(size_t cap = 0) : header(new T[cap]), capacity(cap), length(0) {};
+    Vector(const Vector &) = delete;
+    
+    Vector(Vector &&other) noexcept : header(other.header), capacity(other.capacity), length(other.length) {
+        other.header = nullptr;
+        other.capacity = 0;
+        other.length = 0;
+    }
+    
+    ~Vector() {
+        std::cout << "destruct Vector(header=" << header << ")" << std::endl;
+        delete[] header;
+    }
+    
+    auto first() -> const T& {
+        return *header;
+    }
+};
+
 #endif //CPP_STRUCTURES_HPP

@@ -1,4 +1,4 @@
-Rust 自诞生起就以它独特、现代化的内存管理机制闻名于世；而其指定的竞争对手 Cpp 从 C++11 以来在内存管理更现代化的道路上下了很大功夫。笔者平时写 Rust 比较多，最近在写 Cpp 便试图给脑中零散的概念做个总结，并使用 Rust 与其作对比，也算是一篇面向 Cpp 用户的 Rust 推销文章吧（本人 Cpp 不够熟练，若有什么地方讲的不对还请赐教）。
+Rust 自诞生起就以它独特、现代化的内存管理机制闻名于世；而其指定的竞争对手 Cpp 从 C++11 以来在内存管理现代化的道路上下了很大功夫。笔者平时写 Rust 比较多，最近在写 Cpp 便试图给脑中零散的概念做个总结，并使用 Rust 与其作对比，也算是一篇面向 Cpp 用户的 Rust 推销文章吧。
 
 本文主要讨论四点内容，引用（reference）、拷贝（copy）、移动（move）和智能指针（smart pointer）。
 
@@ -464,12 +464,91 @@ call move constructor
 
 有时这点额外内存开销是可以忽略不计的，但不是所有时候都这样。减少内存开销的常见做法是堆分配，但堆分配带来的新问题是可能会内存泄漏。
 
-如果使用堆内存分配和（地址）拷贝，就需要想一套方案来决定什么时候回收内存。常见的思路是引用计数或者 [GC](https://en.wikipedia.org/wiki/Garbage_collection_(computer_science))。
+如果使用堆内存分配和拷贝，就需要想一套方案来决定什么时候回收内存。常见的思路是引用计数或者 [GC](https://en.wikipedia.org/wiki/Garbage_collection_(computer_science))。
 
 但我们可以发现，移动是天然符合 [RAII](https://zh.wikipedia.org/wiki/RAII) 的：堆内存分配，堆内存生命期与栈对象一致（在栈对象析构函数中回收内存）。
 
-比如我们来造一个 `String`：
+比如我们来造一个 `Vector` 
+
+```cpp
+// [cpp] bazel run //move-or-copy:vector 
+
+#include <cstdlib>
+#include <iostream>
+
+template<typename T>
+class Vector {
+    T *header;
+    size_t capacity;
+    size_t length;
+  public:
+    explicit Vector(size_t cap = 0) : header(new T[cap]), capacity(cap), length(0) {};
+    Vector(const Vector &) = delete;
+    
+    Vector(Vector &&other) noexcept : header(other.header), capacity(other.capacity), length(other.length) {
+        other.header = nullptr;
+        other.capacity = 0;
+        other.length = 0;
+    }
+    
+    ~Vector() {
+        std::cout << "destruct Vector(header=" << header << ")" << std::endl;
+        delete[] header;
+    }
+    
+    auto first() -> const T& {
+        return *header;
+    }
+};
 
 
+auto product_vector() {
+    auto v = Vector<int>(10);
+    return std::move(v);
+}
+
+auto consume_vector(Vector<int> _v) {
+
+}
+
+int main() {
+    auto v = product_vector();
+    consume_vector(std::move(v));
+    return 0;
+}
+```
+
+> 我们在这里显式删除了拷贝构造函数，导致它只能移动而无法拷贝；你也可以实现它。
+
+打印出
+
+```cpp
+destruct Vector(header=0x0)
+destruct Vector(header=0x7fd361c02a10)
+destruct Vector(header=0x0)
+```
+
+从析构顺序来看只有 `consume_vector` 中的 `v` delete 了真正的 `header`，`product_vector` 和 `main` 中的 `v` 再析构之前被 move 从而被“掏空”，`header` 变成了 `nullptr`。
+
+#### 不足之处
+
+虽然 Cpp 的拷贝和移动机制已经很完善了，但依然存在一些缺陷，最主要的问题就是语义上的 move 并没有语法上的支持。
+
+- 虽然 move 了，但后面可能还会不小心用到。当然这种情况现代编辑器或者编译器一般都会给个 warning。
+- 虽然 move 了，但之前的引用还在被使用，这种情况编辑器和编译器很难发觉。
+
+```cpp
+// [cpp] bazel run //move-or-copy:object_moved
+
+int main() {
+    auto v = Vector<int>(10);
+    auto& ref_v = v;
+    std::cout << ref_v.first() << std::endl;
+    auto moved = std::move(v);
+    std::cout << ref_v.first() << std::endl;
+}
+```
+
+没有任何 warning，运行 segmentation fault。
 
 
