@@ -41,3 +41,12 @@ cc_binary(
         'structures'
     ]
 )
+
+cc_binary(
+    name = 'move_by_memcopy',
+    srcs = ["move_by_memcopy.cpp"],
+    copts = ["-std=c++17"],
+    deps = [
+        'structures'
+    ]
+)

@@ -518,7 +518,7 @@ int main() {
 }
 ```
 
-> 我们在这里显式删除了拷贝构造函数，导致它只能移动而无法拷贝；你也可以实现它。
+> 我们在这里显式删除了拷贝构造函数，导致它只能移动而无法拷贝，你也可以实现它。
 
 打印出
 
@@ -532,9 +532,9 @@ destruct Vector(header=0x0)
 
 #### 不足之处
 
-虽然 Cpp 的拷贝和移动机制已经很完善了，但依然存在一些缺陷，最主要的问题就是语义上的 move 并没有语法上的支持。
+虽然 Cpp 的拷贝和移动机制已经很完善了，但依然存在一些缺陷，最主要的问题就是语义上的 move 并没有静态分析的支持。
 
-- 虽然 move 了，但后面可能还会不小心用到。当然这种情况现代编辑器或者编译器一般都会给个 warning。
+- 虽然 move 了，但后面可能还会不小心用到。当然这种情况现代编辑器和编译器一般都会给个 warning。
 - 虽然 move 了，但之前的引用还在被使用，这种情况编辑器和编译器很难发觉。
 
 ```cpp
@@ -549,6 +549,162 @@ int main() {
 }
 ```
 
-没有任何 warning，运行 segmentation fault。
+没有任何 warning，运行时 segmentation fault。
+
+### Rust
+
+#### 移动
+
+与 Cpp 不同的是，Rust 所有类型默认都是移动的，除非它实现了 `trait Copy`，所以我们先来讲移动。
+
+Rust 无法像 Cpp 那样自定义移动操作，移动事实上只是一次 memory copy。但是，变量的所有权（`ownership`）已经移交出去了，你永远不能再使用这个变量，除非你再给它所有权。
+
+> 移交所有权就像 Cpp 里的取右值引用
+
+```rust
+// [rust] cargo run --example ownership_moved 
+
+fn main() {
+    let a = String::from("hello, world");
+    println!("{}", &a);
+    let b = a;
+    println!("{}", &a);
+}
+```
+
+编译失败：`borrow of moved value: 'a'`。
+
+如果它正在被引用，就不能被移动
+
+```rust
+// [rust] cargo run --example ownership_borrowed 
+fn main() {
+    let a = String::from("hello, world");
+    let ref_a = &a;
+    println!("{}", ref_a);
+    let b = a;
+    println!("{}", ref_a);
+}
+```
+
+编译失败：` cannot move out of 'a' because it is borrowed`。
+
+所以 Rust 的移动跟 Cpp 的移动在语义上是完全一致的，但 Rust 的静态分析可以保证：
+
+- 不能对已移交所有权的变量取引用。
+- 在其任意引用的生命期内变量不能移交所有权。
+
+说到这，还剩下的一个问题就是，Rust 怎样在不自定义移动操作的情况下控制资源的回收（堆内存的释放）呢？
+
+比如，如果 Cpp 的移动也只能是 memory copy，那么：
+
+```cpp
+// [cpp] bazel run //move-or-copy:move_by_memcopy 
+
+class B {
+    int *_data;
+  public:
+    explicit B(int data) : _data(new int(data)) {}
+    
+    B(const B &) = delete;
+    
+    B(B &&other) noexcept : _data(other._data) {}
+    
+    ~B() {
+        std::cout << "delete " << _data << std::endl;
+        delete _data;
+    }
+};
+
+auto get_b() {
+    auto b = B(1);
+    return std::move(b); // 防止返回值优化，强制移动
+}
+
+int main() {
+    auto b = get_b();
+    return 0;
+}
+```
+
+运行
+
+```bash
+delete 0x7ffa04402a10
+delete 0x7ffa04402a10
+move_by_memcopy(58846,0x10af085c0) malloc: *** error for object 0x7ffa04402a10: pointer being freed was not allocated
+move_by_memcopy(58846,0x10af085c0) malloc: *** set a breakpoint in malloc_error_break to debug
+[1]    58846 abort      bazel run //move-or-copy:move_by_memcopy
+```
+
+`get_b` 和 `main` 两个函数执行完后 `delete` 了同一个指针。
+
+但在 Rust 中
+
+```rust
+// [rust] cargo run --example drop
+
+#![feature(ptr_internals)]
+
+use core::ptr::{self, Unique};
+use core::mem;
+use std::alloc::{dealloc, Layout, alloc};
+
+struct B {
+    data: Unique<i32>
+}
+
+static I32_LAYOUT: Layout = Layout::from_size_align_unchecked(mem::size_of::<i32>(), mem::align_of::<i32>());
+
+impl B {
+    fn new(value: i32) -> Self {
+        unsafe {
+            let raw_ptr = alloc(I32_LAYOUT) as *mut i32;
+            ptr::write(raw_ptr, value);
+            Self { data: Unique::new_unchecked(raw_ptr) }
+        }
+    }
+
+    fn as_ref(&self) -> &i32 {
+        unsafe {
+            self.data.as_ref()
+        }
+    }
+}
+
+impl Drop for B {
+    fn drop(&mut self) {
+        println!("drop raw ptr: {:?}", self.data);
+        unsafe {
+            dealloc(self.data.as_ptr() as *mut u8, I32_LAYOUT);
+        }
+    }
+}
+
+fn boxed(value: i32) -> B {
+    let b = B::new(value);
+    return b;
+}
+
+fn main() {
+    let b = boxed(1);
+    println!("b = {}", b.as_ref());
+}
+```
+
+> 手动 alloc、dealloc 和操作裸指针是不安全的行为，大多数场景下应使用已封装好的组件（如 `Box`）来替换裸指针，以上代码仅供参考。
+
+运行，打印结果是
+
+```bash
+b = 1
+drop raw ptr: 0x7ff42ec02c40
+```
+
+你会发现这个叫作 `Drop`，看起来像是析构函数的 `trait` 跟 Cpp 析构函数还是有明显差别的：`Drop::drop` 只会在所有权被 drop 的时候被调用。
+
+函数 `boxed` 中的 `b` 返回之后已经把所有权移交给了 `main` 里的 `b`，故 `boxed` 里 `b` 在函数调用结束被回收时仅仅回收了它在栈上占用的内存，而不会调用 `Drop`。
+
+所以，一个变量交出了所有权之后就没有任何被访问的可能性（甚至没有析构函数之类的东西可调用）。Rust 就是以如此简洁的方式完美地实现了移动！
 
 

@@ -49,8 +49,23 @@ class Vector {
         delete[] header;
     }
     
-    auto first() -> const T& {
+    auto first() -> const T & {
         return *header;
+    }
+};
+
+class B {
+    int *_data;
+  public:
+    explicit B(int data) : _data(new int(data)) {}
+    
+    B(const B &) = delete;
+    
+    B(B &&other) noexcept : _data(other._data) {}
+    
+    ~B() {
+        std::cout << "delete " << _data << std::endl;
+        delete _data;
     }
 };
 
