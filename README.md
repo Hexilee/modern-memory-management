@@ -460,7 +460,7 @@ call move constructor
 
 #### 为什么需要拷贝和移动
 
-拷贝和移动本质上都是为了保证变量与其绑定的对象生命期一致，这是它们与引用本质上的目的区别，用额外的内存开销换取内存安全。
+拷贝和移动本质上都是为了保证变量与其绑定的对象生命期一致，这是它们与引用本质上的目的区别，用额外的内存开销换取内存安全和编码便利。
 
 有时这点额外内存开销是可以忽略不计的，但不是所有时候都这样。减少内存开销的常见做法是堆分配，但堆分配带来的新问题是可能会内存泄漏。
 
@@ -591,7 +591,7 @@ fn main() {
 
 编译失败：` cannot move out of 'a' because it is borrowed`。
 
-所以 Rust 的移动跟 Cpp 的移动在语义上是完全一致的，但 Rust 的静态分析可以保证：
+虽然 Rust 另造了一套概念，但仔细想想可以发现，Rust 的移动跟 Cpp 的移动在语义上是完全一致的。但是，Rust 可以在编译期保证：
 
 - 不能对已移交所有权的变量取引用（已移交所有权的变量无绑定对象）。
 - 在其任意引用的生命期内对象不能被移动。
@@ -707,41 +707,89 @@ drop raw ptr: 0x7ff42ec02c40
 
 函数 `boxed` 中的 `b` 返回之后已经把对象的所有权移交给了 `main` 里的 `b`，故 `boxed` 里 `b` 在函数调用结束被回收时仅仅回收了它在栈上占用的内存，而不会调用 `Drop`。
 
-所以，一个变量交出了所有权之后就没有任何被访问的可能性（甚至没有析构函数之类的东西可调用）。Rust 就是以如此简洁的方式完美地实现了移动！
+所以，一个对象在被移动之后就没有任何被访问的可能性（甚至没有析构函数之类的东西可调用）。Rust 就是以如此简洁的方式完美地实现了移动！
 
 
 #### 拷贝
 
-Rust 可能并不是很喜欢隐式拷贝，它有两个 `trait`，一个是 `Clone`，一个是 `Copy`。
+Rust 可能并不待见隐式拷贝，它有两个 `trait`，一个是 `Clone`，一个是 `Copy`。
 
-`Clone` 
-
-Rust 的布尔值（bool）、字符（Char）、数值类型（各种整型和浮点型）
+`Clone` 是显式拷贝：
 
 ```rust
+// [rust] cargo run --example clone
+impl Clone for B {
+    fn clone(&self) -> Self {
+        B::new(*self.as_ref())
+    }
+}
+
+fn boxed(value: i32) -> B {
+    let b = B::new(value);
+    return b.clone();
+}
+
+fn main() {
+    let b = boxed(1);
+    println!("b = {}", b.as_ref());
+}
+```
+
+运行，打印出
+
+```bash
+drop raw ptr: 0x7fb7a3c02c40
+b = 1
+drop raw ptr: 0x7fb7a3c02c50
+```
+
+这样的话 `B` 还是默认移动，但你需要拷贝时可以显式调用 `clone` 方法。这在 Rust 里是比较常见也是比较受推崇的。
+
+`Copy` 是隐式拷贝，Rust 的布尔值（bool）、字符（Char）、数值类型（各种整型和浮点型）、不可变引用以及各种指针都实现了拷贝，但复合类型 `T` 要实现它需要符合三个条件：
+
+ - `T` 实现了 `Clone`
+ - `T` 所有的成员都实现了 `Copy`
+ - `T` 不能实现 `Drop`
+
+极为苛刻，直接劝退。比如我们的 B 就因为实现了 `Drop` 而无法实现 `Copy`，只能显式 clone （同时实现 `Drop` 和 `Copy` 在语义上没什么毛病，但是在当前实现上有问题所以禁止了，详情见 [E0184](https://doc.rust-lang.org/error-index.html#E0184)）。
+
+`T` 需要实现 `Clone` 的原因是 `Copy` 只是隐式地调用 `clone`，逻辑还是用 `Clone` 的。
+
+`T` 所有成员都必须实现 `Copy` 是不希望 `Copy` 被滥用。如果有成员是只能移动的，那拷贝开销往往会比较大（得手动拷贝无法隐式拷贝的成员），这种时候还是应该默认移动，拷贝必须显式。
+
+而且 `Copy` 一般不需要手动实现，当所有成员都实现了 `Copy`，你可以给 `T` 自动实现 `Clone` 和 `Copy`。
+
+```rust
+// [rust] cargo run --example copy
+
+#[derive(Clone, Copy)]
 pub struct C {
-    data: B
+    data: i32
 }
 
 impl C {
-    fn new(value: i32) -> Self {
-        Self { data: B::new(value) }
+    pub fn new(value: i32) -> Self {
+        Self { data: value }
     }
 
-    fn as_ref(&self) -> &i32 {
-        unsafe {
-            self.data.as_ref()
-        }
+    pub fn data(&self) -> &i32 {
+        &self.data
     }
 }
 
-impl Clone for C {
-    fn clone(&self) -> Self {
-        Self::new(*self.as_ref())
-    }
+
+fn consume_c(_c: C) {}
+
+fn main() {
+    let c = C::new(1);
+    consume_c(c); // copy
+    println!("c = {}", c.data()); // unmoved
 }
-
-impl Copy for C {}
-
 ```
+
+总之，隐式拷贝在 [E0184](https://doc.rust-lang.org/error-index.html#E0184) 没有得到解决之前仅仅能用于纯栈对象的拷贝（所有权的复制），没啥其它用处；解决了之后像 `Rc`、`Arc` 之类的东西可能就不需要再手动 `clone` 了。
+
+
+
+
 

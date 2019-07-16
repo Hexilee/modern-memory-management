@@ -52,3 +52,9 @@ impl Drop for B {
         }
     }
 }
+
+impl Clone for B {
+    fn clone(&self) -> Self {
+        B::new(*self.as_ref())
+    }
+}

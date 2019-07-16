@@ -1,6 +1,3 @@
-use modern_memory_management::C;
-use std::rc::Rc;
-
 #[derive(Clone, Copy)]
 pub struct C {
     data: i32
@@ -8,7 +5,7 @@ pub struct C {
 
 impl C {
     pub fn new(value: i32) -> Self {
-        Self { data: value}
+        Self { data: value }
     }
 
     pub fn data(&self) -> &i32 {
@@ -17,13 +14,10 @@ impl C {
 }
 
 
-
-fn get_c() -> C {
-    let c = C::new(1);
-    c
-}
+fn consume_c(_c: C) {}
 
 fn main() {
-    let c = get_c();
-    println!("c = {}", c.as_ref());
+    let c = C::new(1);
+    consume_c(c);
+    println!("c = {}", c.data());
 }
