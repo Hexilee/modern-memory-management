@@ -587,7 +587,7 @@ Rust 无法像 Cpp 那样自定义移动操作，目前在实现上移动只是�
 
 
 > - 移交所有权可以看作对象与当前变量解除绑定后与新的变量绑定。
-> - 所有权就像 Cpp 里的右值引用。
+> - 所有权的概念同样存在于 Cpp 智能指针中。
 
 ```rust
 // [rust] cargo run --example ownership_moved 
@@ -617,7 +617,7 @@ fn main() {
 
 编译失败：` cannot move out of 'a' because it is borrowed`。
 
-虽然 Rust 另造了一套概念，但仔细想想可以发现，Rust 的移动跟 Cpp 的移动在语义上是完全一致的。但是，Rust 可以在编译期保证：
+仔细想想可以发现，Rust 的移动跟 Cpp 的移动在语义上是完全一致的。但是，Rust 可以在编译期保证：
 
 - 不能对已移交所有权的变量取引用（已移交所有权的变量无绑定对象）。
 - 在其任意引用的生命期内对象不能被移动。
@@ -889,8 +889,207 @@ A destruct, data=1
 
 `std::unique_ptr` 具体用法请移步 cppreference
 
-#### share_ptr(weak_ptr)
+#### shared_ptr
+
+如同我们在[为什么需要拷贝和移动](#为什么需要拷贝和移动)中讨论的，如果使用堆内存分配和拷贝，就需要想一套方案来决定什么时候回收内存。常见的思路是引用计数或者 [GC](https://en.wikipedia.org/wiki/Garbage_collection_(computer_science))。
+
+`std::shared_ptr` 是使用引用计数方案的，共享的智能指针。它的大致结构如下：
+
+```cpp
+template<typename T>
+class shared_ptr {
+    T *raw_ptr;
+    uint64_t *counter;
+  public:
+    explicit shared_ptr(T *raw_ptr) : raw_ptr(raw_ptr), counter(new uint64_t(1)) {}
+    
+    shared_ptr(const shared_ptr &other) : raw_ptr(other.raw_ptr), counter(other.counter) {
+        ++(*counter);
+    };
+    
+    shared_ptr(shared_ptr &&other) noexcept : raw_ptr(other.raw_ptr), counter(other.counter) {
+        other.raw_ptr = nullptr;
+        other.counter = nullptr;
+    };
+    
+    T *operator->() {
+        return raw_ptr;
+    }
+    
+    ~shared_ptr() {
+        std::cout << "counter=" << *counter - 1 << std::endl;
+        if (--(*counter) == 0) {
+            delete raw_ptr;
+            delete counter;
+        }
+    }
+};
+```
+
+用例：
+
+```cpp
+auto product(int data) {
+    auto a = shared_ptr(new A(data));
+    return static_cast<shared_ptr<A>&>(a); // 防止返回值优化，强制拷贝
+}
+
+auto consume(shared_ptr<A> a) {
+
+}
+
+int main() {
+    auto a = product(1);
+    auto a2 = a;
+    consume(a2);
+    a->say();
+    return 0;
+}
+```
+
+打印出
+
+```bash
+counter=1
+counter=2
+data=1
+counter=1
+counter=0
+A destruct, data=1
+```
+
+##### weak_ptr
+
+`std::weak_ptr` 代表“弱引用”（`std::shared_ptr` 代表“强引用”），是引用计数里的概念，用于解决循环引用的问题。它的使用依赖 `std::shared_ptr`。
+
+循环引用：
+
+```cpp
+// [cpp] bazel run //smart-pointer:circular_ref 
+
+#include <iostream>
+
+class Boy;
+
+class Girl;
+
+class Boy {
+    std::shared_ptr<Girl> girl_friend;
+  public:
+    explicit Boy() : girl_friend(nullptr) {};
+    auto set(std::shared_ptr<Girl> &girl) {
+        girl_friend = girl;
+    };
+    ~Boy() {
+        std::cout << "boy destruct" << std::endl;
+    }
+};
+
+class Girl {
+    std::shared_ptr<Boy> boy_friend;
+  public:
+    explicit Girl() : boy_friend(nullptr) {};
+    
+    auto set(std::shared_ptr<Boy> &boy) {
+        boy_friend = boy;
+    };
+    
+    ~Girl() {
+        std::cout << "girl destruct" << std::endl;
+    }
+};
 
 
+int main() {
+    auto boy = std::make_shared<Boy>();
+    auto girl = std::make_shared<Girl>();
+    boy->set(girl);
+    girl->set(boy);
+    return 0;
+}
 
+```
+
+运行，没有任何打印结果，说明这两个对象都没有被析构，内存泄漏了。
+
+`std::weak_ptr` 用例：
+
+```cpp
+std::shared_ptr<int> p1(new int(5));
+std::weak_ptr<int> wp1 = p1; // 还是只有p1有所有权。
+
+{
+  std::shared_ptr<int> p2 = wp1.lock(); // p1和p2都有所有权
+  if (p2) // 使用前需要检查
+  { 
+    // 使用p2
+  }
+} // p2析构了，现在只有p1有所有权。
+
+p1.reset(); // 内存被释放。
+
+std::shared_ptr<int> p3 = wp1.lock(); // 因为内存已经被释放了，所以得到的是空指针。
+if（p3）
+{
+  // 不会执行到这。
+}
+```
+
+`std::weak_ptr` 本身的构造并不会使引用计数增加（不会复制所有权），它仅仅在需要使用时（试图）临时获取所有权。
+
+使用 `std::weak_ptr` 改造我们的程序：
+
+```cpp
+// [cpp] bazel run //smart-pointer:weak_ptr    
+
+#include <iostream>
+
+class Boy;
+
+class Girl;
+
+class Boy {
+    std::shared_ptr<Girl> girl_friend;
+  public:
+    explicit Boy() : girl_friend(nullptr) {};
+    auto set(std::shared_ptr<Girl> &girl) {
+        girl_friend = girl;
+    };
+    ~Boy() {
+        std::cout << "boy destruct" << std::endl;
+    }
+};
+
+class Girl {
+    std::weak_ptr<Boy> boy_friend;
+  public:
+    explicit Girl() : boy_friend(std::shared_ptr<Boy>(nullptr)) {};
+    
+    auto set(std::shared_ptr<Boy> &boy) {
+        boy_friend = boy;
+    };
+    
+    ~Girl() {
+        std::cout << "girl destruct" << std::endl;
+    }
+};
+
+
+int main() {
+    auto boy = std::make_shared<Boy>();
+    auto girl = std::make_shared<Girl>();
+    boy->set(girl);
+    girl->set(boy);
+    return 0;
+}
+```
+
+运行，打印出：
+
+```bash
+boy destruct
+girl destruct
+```
+
+两个对象顺利地被析构。
 

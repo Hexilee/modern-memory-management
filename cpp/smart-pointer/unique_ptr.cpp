@@ -3,19 +3,6 @@
  */
 
 #include "structures.hpp"
-#include <iostream>
-
-class A {
-    int data;
-  public:
-    explicit A(int data) : data(data) {};
-    auto say() {
-        std::cout << "data=" << data << std::endl;
-    }
-    ~A() {
-        std::cout << "A destruct, data=" << data << std::endl;
-    }
-};
 
 auto get_a(int data) {
     auto a = unique_ptr(new A(data));
