@@ -166,7 +166,33 @@ C(id=0) destructed
 id=-1840470160
 ```
 
-第二个问题的例子（略）
+第二个问题的例子
+
+```cpp
+// [cpp] bazel run //reference:data_race 
+
+#include <thread>
+#include <iostream>
+#include <random>
+#include <chrono>
+
+int main() {
+    auto str = "hello, world";
+    std::uniform_int_distribution<> dist{10, 100};
+    auto handler = std::thread([&str, &dist]() {
+        std::mt19937_64 eng{std::random_device{}()};
+        std::this_thread::sleep_for(std::chrono::milliseconds{dist(eng)});
+        str = nullptr;
+    });
+    std::mt19937_64 eng{std::random_device{}()};
+    std::this_thread::sleep_for(std::chrono::milliseconds{dist(eng)});
+    std::cout << str << std::endl;
+    handler.join();
+    return 0;
+}
+```
+
+结果随机 segmentation fault。
 
 ### Rust
 
@@ -755,7 +781,7 @@ drop raw ptr: 0x7fb7a3c02c50
 
 `T` 需要实现 `Clone` 的原因是 `Copy` 只是隐式地调用 `clone`，逻辑还是用 `Clone` 的。
 
-`T` 所有成员都必须实现 `Copy` 是不希望 `Copy` 被滥用。如果有成员是只能移动的，那拷贝开销往往会比较大（得手动拷贝无法隐式拷贝的成员），这种时候还是应该默认移动，拷贝必须显式。
+`T` 所有成员都必须实现 `Copy` 是不希望 `Copy` 被滥用。如果有成员是只能移动的，那拷贝开销往往会比较大（得手动拷贝无法隐式拷贝的成员），这种时候还是应该默认移动，显示拷贝。
 
 而且 `Copy` 一般不需要手动实现，当所有成员都实现了 `Copy`，你可以给 `T` 自动实现 `Clone` 和 `Copy`。
 
@@ -787,7 +813,10 @@ fn main() {
 }
 ```
 
-总之，隐式拷贝在 [E0184](https://doc.rust-lang.org/error-index.html#E0184) 没有得到解决之前仅仅能用于纯栈对象的拷贝（所有权的复制），没啥其它用处；解决了之后像 `Rc`、`Arc` 之类的东西可能就不需要再手动 `clone` 了。
+总之，隐式拷贝在 [E0184](https://doc.rust-lang.org/error-index.html#E0184) 没有得到解决之前仅仅能用于纯栈对象的拷贝（所有权的复制），没啥其它用处；解决了之后像 `Rc`、`Arc` 之类的可能结构就不需要再手动 `clone` 了。
+
+## 智能指针
+
 
 
 

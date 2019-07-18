@@ -52,6 +52,12 @@ cc_binary(
 )
 
 cc_binary(
+    name = 'data_race',
+    srcs = ['data_race.cpp'],
+    copts = ["-std=c++11"],
+)
+
+cc_binary(
     name = 'ref_dangling',
     srcs = ['ref_dangling.cpp'],
     copts = ["-std=c++14"],
