@@ -1,11 +1,11 @@
-use std::rc::{Rc, Weak};
+use std::sync::{Arc, Weak};
 
 fn get_dead_data() -> Weak<&'static str> {
-    Rc::downgrade(&Rc::new("dead"))
+    Arc::downgrade(&Arc::new("dead"))
 }
 
 fn main() {
-    if let Some(alive) = Rc::downgrade(&Rc::new("alive")).upgrade() {
+    if let Some(alive) = Arc::downgrade(&Arc::new("alive")).upgrade() {
         println!("{}", alive);
     }
 

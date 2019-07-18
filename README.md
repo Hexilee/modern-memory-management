@@ -28,7 +28,7 @@ Rust 自诞生起就以它独特、现代化的内存管理机制闻名于世；
           * [weak_ptr](#weak_ptr)
     * [Rust](#rust-2)
        * [Box](#box)
-       * [Rc(Arc)](#rcarc)
+       * [Arc(Rc)](#arcrc)
     * [对比](#对比)
  * [总结](#总结)
 
@@ -1154,36 +1154,36 @@ fn main() {
 ```
 
 
-#### Rc(Arc)
+#### Arc(Rc)
 
-`std::rc::Rc` 相当于 Cpp 中的 `std::shared_ptr`。
+`std::sync::Arc` 等同于 Cpp 中的 `std::shared_ptr`。
 
 ```rust
-// [rust] cargo run --example rc 
+// [rust] cargo run --example arc 
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 fn main() {
-    let a = Rc::new(1);
+    let a = Arc::new(1);
     let b = a.clone();
     println!("a={}", a);
     println!("b={}", b);
 }
 ```
 
-`std::rc::Weak` 相当于 Cpp 中的 `std::weak_ptr`。
+`std::sync::Weak` 相当于 Cpp 中的 `std::weak_ptr`。
 
 ```rust
 // [rust] cargo run --example weak 
 
-use std::rc::{Rc, Weak};
+use std::sync::{Arc, Weak};
 
 fn get_dead_data() -> Weak<&'static str> {
-    Rc::downgrade(&Rc::new("dead"))
+    Arc::downgrade(&Arc::new("dead"))
 }
 
 fn main() {
-    if let Some(alive) = Rc::downgrade(&Rc::new("alive")).upgrade() {
+    if let Some(alive) = Arc::downgrade(&Arc::new("alive")).upgrade() {
         println!("{}", alive);
     }
 
@@ -1201,8 +1201,7 @@ fn main() {
 alive
 ```
 
-`std::sync::Arc` 是线程安全的 `Rc`。
-
+`std::rc::Rc` 是 `Arc` 的单线程版本。
 
 ### 对比
 
@@ -1213,7 +1212,7 @@ Rust 的 `Box` 相对 Cpp 的`std::unique_ptr`更优，因为 Rust 可以在编�
 - 不能对已移交所有权的变量取引用（已移交所有权的变量无绑定对象）。
 - 在其任意引用的生命期内对象不能被移动。
 
-Rust 的 `std::rc::Rc` 和 `std::shared_ptr` 差距不大，但 `Rc` 必须显式 `clone`。当 [E0184](https://doc.rust-lang.org/error-index.html#E0184) 解决之后可以实现隐式拷贝（不过不一定会实现）。
+Rust 的 `std::sync::Arc` 和 `std::shared_ptr` 差距不大，但 `Arc` 必须显式 `clone`。当 [E0184](https://doc.rust-lang.org/error-index.html#E0184) 解决之后可以实现隐式拷贝（不过不一定会实现）。
 
 
 ## 总结
