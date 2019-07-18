@@ -720,7 +720,7 @@ fn main() {
 }
 ```
 
-> 手动 alloc、dealloc 和操作裸指针是不安全的行为，大多数场景下应使用已封装好的组件（如 `Box`）来替换裸指针，以上代码仅供参考。
+> 或许在这里你会觉得 Rust 很繁琐，这是因为手动 alloc、dealloc 和操作裸指针是不安全的行为，大多数场景下应使用已封装好的组件（如 `Box`）来替换裸指针。
 
 运行，打印结果是
 
@@ -1092,4 +1092,104 @@ girl destruct
 ```
 
 两个对象顺利地被析构。
+
+### Rust
+
+#### Box
+
+Rust 中的 `Box` 等同于 Cpp 中的 `std::unique_ptr`。
+
+```rust
+pub struct A {
+    _data: i32,
+}
+
+impl A {
+    pub fn new(data: i32) -> Self {
+        A { _data: data }
+    }
+
+    pub fn data(&self) -> &i32 {
+        &self._data
+    }
+
+    pub fn mut_data(&mut self) -> &mut i32 {
+        &mut self._data
+    }
+}
+
+fn main() {
+    let a = Box::new(A::new(1)); // 堆分配
+    println!("a._data={}", a.data());
+}
+
+```
+
+
+#### Rc(Arc)
+
+`std::rc::Rc` 相当于 Cpp 中的 `std::shared_ptr`。
+
+```rust
+// [rust] cargo run --example rc 
+
+use std::rc::Rc;
+
+fn main() {
+    let a = Rc::new(1);
+    let b = a.clone();
+    println!("a={}", a);
+    println!("b={}", b);
+}
+```
+
+`std::rc::Weak` 相当于 Cpp 中的 `std::weak_ptr`。
+
+```rust
+// [rust] cargo run --example weak 
+
+use std::rc::{Rc, Weak};
+
+fn get_dead_data() -> Weak<&'static str> {
+    Rc::downgrade(&Rc::new("dead"))
+}
+
+fn main() {
+    if let Some(alive) = Rc::downgrade(&Rc::new("alive")).upgrade() {
+        println!("{}", alive);
+    }
+
+    if let Some(dead) = get_dead_data().upgrade() {
+        println!("{}", dead);
+    }
+}
+```
+
+> &'static str 表示字符串字面量类型
+
+打印结果：
+
+```bash
+alive
+```
+
+`std::sync::Arc` 是线程安全的 `Rc`。
+
+
+### 对比
+
+Cpp 和 Rust 智能指针的对比就是它们移动和拷贝机制的对比。
+
+Rust 的 `Box` 相对 Cpp 的`std::unique_ptr`更优，因为 Rust 可以在编译期保证：
+
+- 不能对已移交所有权的变量取引用（已移交所有权的变量无绑定对象）。
+- 在其任意引用的生命期内对象不能被移动。
+
+Rust 的 `std::rc::Rc` 和 `std::shared_ptr` 差距不大，但 `Rc` 必须显式 `clone`。当 [E0184](https://doc.rust-lang.org/error-index.html#E0184) 解决之后可以实现隐式拷贝（不过不一定会实现）。
+
+
+## 总结
+
+Cpp 和 Rust 在现代化内存管理的思路上是十分一致的，但 Rust 在静态检查上更胜一筹。学习 Rust 也让我对 Cpp 有了更深的理解。
+
 
