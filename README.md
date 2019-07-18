@@ -1,8 +1,8 @@
-Rust 自诞生起就以它独特、现代化的内存管理机制闻名于世；而其指定的竞争对手 Cpp 从 C++11 以来在内存管理现代化的道路上下了很大功夫。笔者平时写 Rust 比较多，最近在写 Cpp 便试图给脑中零散的概念做个总结，并使用 Rust 与其作对比，也算是一篇面向 Cpp 用户的 Rust 推销文章吧。
+Rust 自诞生起就以它独特、现代化的内存管理机制闻名于世；而其指定的竞争对手 Cpp 自 C++11 以来在内存管理现代化的道路上也下了很大功夫。笔者平时写 Rust 比较多，最近在写 Cpp 便试图给脑中零散的概念做个总结，并使用 Rust 与其作对比，也算是一篇面向 Cpp 用户的 Rust 推销文章吧。
 
 本文主要讨论四点内容，引用（reference）、拷贝（copy）、移动（move）和智能指针（smart pointer）。
 
-=================
+---------------
 
  * [引用](#引用)
     * [Cpp](#cpp)
@@ -38,11 +38,11 @@ Rust 自诞生起就以它独特、现代化的内存管理机制闻名于世；
 
 ### Cpp
 
-首先讲 Cpp 的引用，我们都知道 Cpp 里引用分为左值（lvalue）引用和右值（rvalue）引用，在这一部分我们主要讨论左值引用（右值引用应该放到后面的移动那一部分讲）。
+首先讲 Cpp 的引用，我们都知道 Cpp 里引用分为左值引用（Lvalue Reference）和右值引用（Rvalue Reference），在这一部分我们主要讨论左值引用（右值引用放到后面的移动那一部分讨论）。
 
 #### 左值引用
 
-Cpp 左值引用的本质是变量别名（alias），即一个已经存在变量的别名（引用同一对象的多个变量），所以可以看到这样的操作：
+Cpp 左值引用的本质是变量别名（alias），即对一个已经存在变量的别名（引用同一对象的多个变量），所以可以看到这样的操作：
 
 ```cpp
 // [cpp] bazel run //reference:lvalue_ref
@@ -104,7 +104,7 @@ a._data = 1
 
 #### 不可变引用
 
-Cpp 的左值引用又可分为可变引用（`T&`）和不可变引用（`const T&`）两种。不可变引用约束了引用的内部不可变：
+Cpp 的左值引用又可分为可变引用（`T&`）和不可变引用（`const T&`）两种。不可变引用保证了引用指向的对象不可变：
 
 ```cpp
 // [cpp] bazel run //reference:const_ref
@@ -122,8 +122,8 @@ class B {
 int main() {
     B b(0);
     auto & ref_a = b.a();
-    ref_a = A(1);
-    auto & ref_data = ref_a.data();
+    ref_a = A(1); // need `auto A::operator=(const A&) const -> const A&;`
+    auto & ref_data = ref_a.data(); // need `auto data() const -> const int&;`
     return 0;
 }
 ```
@@ -148,7 +148,7 @@ auto const_data() const -> const int & {
 int main() {
     B b(0);
     auto & ref_data = b.a().const_data();
-    ref_data = 1;
+    ref_data = 1; // need `auto int::operator=(const int&) const -> const int&;`
     return 0;
 }
 ```
@@ -383,7 +383,7 @@ fn main() {
 
 那么，这个约束对线程安全有什么帮助呢？**一个可变引用不能与其他引用同时存在**，再加上后面会提到的**对象在被引用时不能移动**，这就意味着在理想情况下是绝对不会出现数据竞争的。
 
-当然这只是在理想情况下，事实上，由于这个约束过强，很多时候必须使用一些基于 Unsafe Rust 的组件（在更强的约束上开洞而非在更弱的约束上不断修修补补也算 Rust 的设计哲学吧，首要考虑安全性）。
+当然这只是在理想情况下，事实上，由于这个约束过强，很多时候必须使用一些基于 Unsafe Rust 的组件（在更强的约束上开洞而非在更弱的约束上修补也算 Rust 的设计哲学吧，首要考虑安全性）。
 
 对 Rust 线程安全有兴趣的读者可以自行参阅官方文档，本文也无法讨论太多了；有一定 Rust 基础的读者还可以看看这篇文章作为拓展阅读[《如何理解 rust 中的 Sync、Send？》](https://zhuanlan.zhihu.com/p/64699643)。
 
@@ -524,7 +524,7 @@ call move constructor
 
 如果使用堆内存分配和拷贝，就需要想一套方案来决定什么时候回收内存。常见的思路是引用计数或者 [GC](https://en.wikipedia.org/wiki/Garbage_collection_(computer_science))。
 
-但我们可以发现，移动是天然符合 [RAII](https://zh.wikipedia.org/wiki/RAII) 的：堆内存分配，堆内存生命期与栈对象一致（在栈对象析构函数中回收内存）。
+但我们可以发现，移动是天然符合 [RAII](https://zh.wikipedia.org/wiki/RAII) 的：堆内存分配，堆内存生命期与栈对象一致（在栈对象析构函数中释放堆内存）。
 
 比如我们来造一个 `Vector` 
 
@@ -590,7 +590,7 @@ destruct Vector(header=0x0)
 
 #### 不足之处
 
-虽然 Cpp 的拷贝和移动机制已经很完善了，但依然存在一些缺陷，最主要的问题就是语义上的 move 并没有静态分析的支持。
+虽然 Cpp 的拷贝和移动机制已经很完善了，但依然存在一些缺陷，最主要的问题就是语义上的 move 并没有静态检查。
 
 - 虽然 move 了，但后面可能还会不小心用到。当然这种情况现代编辑器和编译器一般都会给个 warning。
 - 虽然 move 了，但之前的引用还在被使用，这种情况编辑器和编译器很难发觉。
@@ -1144,10 +1144,6 @@ impl A {
     pub fn data(&self) -> &i32 {
         &self._data
     }
-
-    pub fn mut_data(&mut self) -> &mut i32 {
-        &mut self._data
-    }
 }
 
 fn main() {
@@ -1222,6 +1218,6 @@ Rust 的 `std::rc::Rc` 和 `std::shared_ptr` 差距不大，但 `Rc` 必须显�
 
 ## 总结
 
-Cpp 和 Rust 在现代化内存管理的思路上是十分一致的，但 Rust 在静态检查上更胜一筹。学习 Rust 也让我对 Cpp 有了更深的理解。
+Cpp 和 Rust 在现代化内存管理的思路上是十分一致的，但 Rust 在静态检查上更胜一筹。学习 Rust 也让笔者对 Cpp 有了更深的理解，有兴趣的读者快打开 Rust 官网进行学习吧！
 
 
