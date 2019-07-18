@@ -817,7 +817,79 @@ fn main() {
 
 ## 智能指针
 
+智能指针（smart pointer）是 Cpp 造出来的概念，Rust 也沿用了。智能指针就是能自动释放所管理内存的指针。
 
+这一部分主要讨论两种智能指针，一种是独占的，一种是共享的。
+
+### Cpp
+
+#### unique_ptr
+
+就如同我们在[为什么需要拷贝和移动](#为什么需要拷贝和移动)中讨论的，移动行为是天然遵守 RAII 的。Cpp 中的 `std::unique_ptr` 就是如此设计的，它的结构类似这样：
+
+```cpp
+template<typename T>
+class unique_ptr {
+    T *raw_ptr;
+  public:
+    explicit unique_ptr(T *raw_ptr) : raw_ptr(raw_ptr) {}
+    
+    unique_ptr(const unique_ptr &) = delete;
+    
+    unique_ptr(unique_ptr &&other) noexcept : raw_ptr(other.raw_ptr) {
+        other.raw_ptr = nullptr;
+    };
+    
+    T *operator->() {
+        return raw_ptr;
+    }
+    
+    ~unique_ptr() {
+        delete raw_ptr;
+    }
+};
+```
+
+它是独占式的智能指针，用例：
+
+```cpp
+// [cpp] bazel run //smart-pointer:unique_ptr 
+
+class A {
+    int data;
+  public:
+    explicit A(int data) : data(data) {};
+    auto say() {
+        std::cout << "data=" << data << std::endl;
+    }
+    ~A() {
+        std::cout << "A destruct, data=" << data << std::endl;
+    }
+};
+
+auto get_a(int data) {
+    auto a = unique_ptr(new A(data));
+    return std::move(a);
+}
+
+int main() {
+    auto a = get_a(1);
+    auto a2 = std::move(a);
+    a2->say();
+    return 0;
+}
+```
+
+运行，打印出：
+
+```bash
+data=1
+A destruct, data=1
+```
+
+`std::unique_ptr` 具体用法请移步 cppreference
+
+#### share_ptr(weak_ptr)
 
 
 
