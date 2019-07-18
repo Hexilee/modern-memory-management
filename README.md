@@ -4,7 +4,7 @@ Rust 自诞生起就以它独特、现代化的内存管理机制闻名于世；
 
 ---------------
 
- * [引用](#引用)
+  * [引用](#引用)
     * [Cpp](#cpp)
        * [左值引用](#左值引用)
        * [不可变引用](#不可变引用)
@@ -21,6 +21,8 @@ Rust 自诞生起就以它独特、现代化的内存管理机制闻名于世；
     * [Rust](#rust-1)
        * [移动](#移动-1)
        * [拷贝](#拷贝-1)
+          * [Clone](#clone)
+          * [Copy](#copy)
  * [智能指针](#智能指针)
     * [Cpp](#cpp-2)
        * [unique_ptr](#unique_ptr)
@@ -264,8 +266,6 @@ fn main() {
 > Rust 中变量对象绑定和引用默认都是不可变的，需要用 `mut` 限定词来使其可变，这与 Cpp 刚好相反。
 
 Rust 的引用同样也分可变引用和不可变引用，Cpp 中对可变引用的约束规则 Rust 也全部涵盖了；并且我们可以注意到，不同于 Cpp 中作为变量别名的引用，Rust 中的引用更像是指针，很多场景下都需要显式地取引用（`&`）和解引用（`*`）。
-
-> Rust 中不能直接拿到裸指针。
 
 看完这个例子后我们继续刚才话题， 第一个问题，Rust 的引用可能比被引用对象本身活得更长吗？答案是不能（在不使用 Unsafe Rust 的情况下）。只要程序过了编译，Rust 能永远保证引用有效。
 
@@ -770,9 +770,11 @@ drop raw ptr: 0x7ff42ec02c40
 
 #### 拷贝
 
-Rust 可能并不待见隐式拷贝，它有两个 `trait`，一个是 `Clone`，一个是 `Copy`。
+Rust 有两个拷贝相关的 `trait`，一个是 `Clone`，一个是 `Copy`。
 
-`Clone` 是显式拷贝：
+##### Clone
+
+`Clone` 是显式拷贝，跟 Cpp 中的拷贝行为是类似的：
 
 ```rust
 // [rust] cargo run --example clone
@@ -801,19 +803,33 @@ b = 1
 drop raw ptr: 0x7fb7a3c02c50
 ```
 
-这样的话 `B` 还是默认移动，但你需要拷贝时可以显式调用 `clone` 方法。这在 Rust 里是比较常见也是比较受推崇的。
+这样的话 `B` 还是默认移动，但你需要拷贝时可以显式调用 `clone` 方法。
 
-`Copy` 是隐式拷贝，Rust 的布尔值（bool）、字符（Char）、数值类型（各种整型和浮点型）、不可变引用以及各种指针都实现了拷贝，但复合类型 `T` 要实现它需要符合三个条件：
+##### Copy
+
+`Copy` 是隐式拷贝，语义上就是 memory copy。Rust 的布尔值（bool）、字符（Char）、数值类型（各种整型和浮点型）、不可变引用以及各种指针都实现了 `Copy`，但复合类型 `T` 要实现它需要符合三个条件：
 
  - `T` 实现了 `Clone`
  - `T` 所有的成员都实现了 `Copy`
  - `T` 不能实现 `Drop`
 
-极为苛刻，直接劝退。比如我们的 B 就因为实现了 `Drop` 而无法实现 `Copy`，只能显式 clone （同时实现 `Drop` 和 `Copy` 在语义上没什么毛病，但是在当前实现上有问题所以禁止了，详情见 [E0184](https://doc.rust-lang.org/error-index.html#E0184)）。
+`T` 需要实现 `Clone` 的原因是很多时候 `Clone` 的实现依赖 `Copy` 会比较方便：
 
-`T` 需要实现 `Clone` 的原因是 `Copy` 只是隐式地调用 `clone`，逻辑还是用 `Clone` 的。
+```rust
+struct MyStruct;
 
-`T` 所有成员都必须实现 `Copy` 是不希望 `Copy` 被滥用。如果有成员是只能移动的，那拷贝开销往往会比较大（得手动拷贝无法隐式拷贝的成员），这种时候还是应该默认移动，显示拷贝。
+impl Copy for MyStruct { }
+
+impl Clone for MyStruct {
+    fn clone(&self) -> MyStruct {
+        *self
+    }
+}
+```
+
+`T` 所有成员都必须实现 `Copy` 是很显然的，当然要所有成员都允许 memory copy。
+
+同时实现 `Drop` 和 `Copy` 在语义上没什么毛病，但是在当前实现上有问题所以禁止了，详情见 [E0184](https://doc.rust-lang.org/error-index.html#E0184)。
 
 而且 `Copy` 一般不需要手动实现，当所有成员都实现了 `Copy`，你可以给 `T` 自动实现 `Clone` 和 `Copy`。
 
@@ -845,8 +861,7 @@ fn main() {
 }
 ```
 
-总之，隐式拷贝在 [E0184](https://doc.rust-lang.org/error-index.html#E0184) 没有得到解决之前仅仅能用于纯栈对象的拷贝（所有权的复制），没啥其它用处；解决了之后像 `Rc`、`Arc` 之类的可能结构就不需要再手动 `clone` 了。
-
+总之，隐式拷贝仅仅能用于纯栈对象的拷贝（momery copy 的同时复制所有权），没有任何可操作性。
 ## 智能指针
 
 智能指针（smart pointer）是 Cpp 造出来的概念，Rust 也沿用了。智能指针就是能自动释放所管理内存的指针。
@@ -1212,7 +1227,7 @@ Rust 的 `Box` 相对 Cpp 的`std::unique_ptr`更优，因为 Rust 可以在编�
 - 不能对已移交所有权的变量取引用（已移交所有权的变量无绑定对象）。
 - 在其任意引用的生命期内对象不能被移动。
 
-Rust 的 `std::sync::Arc` 和 `std::shared_ptr` 差距不大，但 `Arc` 必须显式 `clone`。当 [E0184](https://doc.rust-lang.org/error-index.html#E0184) 解决之后可以实现隐式拷贝（不过不一定会实现）。
+Rust 的 `std::sync::Arc` 和 `std::shared_ptr` 差距不大，但 `Arc` 必须显式 `clone`。
 
 
 ## 总结
