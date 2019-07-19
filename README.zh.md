@@ -1,10 +1,39 @@
-The Rust programming language has been famous for its special,  modern memory management strategy since it was born. While, as the target competitor of Rust, Cpp also has paid much attention to memory management modernization since C++11 was released.
+Rust 自诞生起就以它独特、现代化的内存管理机制闻名于世；而其指定的竞争对手 Cpp 自 C++11 以来在内存管理现代化的道路上也下了很大功夫。笔者平时写 Rust 比较多，最近在写 Cpp 便试图给脑中零散的概念做个总结，并使用 Rust 与其作对比，也算是一篇面向 Cpp 用户的 Rust 推销文章吧。
 
-Recently I start a project using Cpp, so I would like to summarize my concept about memory management strategy of Cpp, and compare it with that in Rust.
+本文主要讨论四点内容，引用（reference）、拷贝（copy）、移动（move）和智能指针（smart pointer）。
 
-You can also regard this blog as an introduction of Rust to developer who using Cpp.
+---------------
 
-This blog consists of four sections: reference, copy, move and smart pointer.
+  * [引用](#引用)
+    * [Cpp](#cpp)
+       * [左值引用](#左值引用)
+       * [不可变引用](#不可变引用)
+       * [没解决的问题](#没解决的问题)
+    * [Rust](#rust)
+       * [引用的生命期](#引用的生命期)
+       * [对可变引用的约束](#对可变引用的约束)
+ * [拷贝和移动](#拷贝和移动)
+    * [Cpp](#cpp-1)
+       * [拷贝](#拷贝)
+       * [移动](#移动)
+       * [为什么需要拷贝和移动](#为什么需要拷贝和移动)
+       * [不足之处](#不足之处)
+    * [Rust](#rust-1)
+       * [移动](#移动-1)
+       * [拷贝](#拷贝-1)
+          * [Clone](#clone)
+          * [Copy](#copy)
+ * [智能指针](#智能指针)
+    * [Cpp](#cpp-2)
+       * [unique_ptr](#unique_ptr)
+       * [shared_ptr](#shared_ptr)
+          * [weak_ptr](#weak_ptr)
+    * [Rust](#rust-2)
+       * [Box](#box)
+       * [Arc(Rc)](#arcrc)
+    * [对比](#对比)
+ * [总结](#总结)
+
 
 
 ## 引用
