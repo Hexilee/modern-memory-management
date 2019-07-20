@@ -4,18 +4,20 @@ Recently I start a project using Cpp, so I would like to summarize my concept ab
 
 You can also regard this blog as an introduction of Rust to developer who using Cpp.
 
-This blog consists of four sections: reference, copy, move and smart pointer.
+This blog consists of four sections: Reference, Copy, Move and Smart Pointer.
 
 
-## 引用
+## Reference
 
 ### Cpp
 
-首先讲 Cpp 的引用，我们都知道 Cpp 里引用分为左值引用（Lvalue Reference）和右值引用（Rvalue Reference），在这一部分我们主要讨论左值引用（右值引用放到后面的移动那一部分讨论）。
+At first, let's talk about the reference in Cpp. As we all know, in Cpp, reference can be divide into lvalue reference and rvalue reference. In this section, we will only talk about lvalue reference (rvalue reference will never be introduced before the section 'Move').
 
-#### 左值引用
+#### Lvalue Reference
 
-Cpp 左值引用的本质是变量别名（alias），即对一个已经存在变量的别名（引用同一对象的多个变量），所以可以看到这样的操作：
+The essence of lvalue reference in Cpp is alias of an existed variable, in the other word, multiple variable referring the same object.
+
+So, you can see some code like this:
 
 ```cpp
 // [cpp] bazel run //reference:lvalue_ref
@@ -41,7 +43,7 @@ int main() {
 }
 ```
 
-或者用一个变量接收这个引用
+You can also use a variable to receive this reference:
 
 ```cpp
 // [cpp] bazel run //reference:lvalue_ref_bind
@@ -55,7 +57,7 @@ int main() {
 }
 ```
 
-使用 C++14 的 `decltype(auto)` 写法
+Or use `decltype(auto)` in C++14.
 
 ```cpp
 // [cpp] bazel run //reference:lvalue_ref_bind_cpp14
@@ -69,15 +71,15 @@ int main() {
 }
 ```
 
-他们的打印结果都毫无疑问是
+Those programs will absolutely print out:
 
 ```bash
 a._data = 1
 ```
 
-#### 不可变引用
+#### Immutable Reference
 
-Cpp 的左值引用又可分为可变引用（`T&`）和不可变引用（`const T&`）两种。不可变引用保证了引用指向的对象不可变：
+The lvalue reference can be also divide into mutable reference (`T&`) and immutable reference (`const T&`). The immutability of reference mean the object referred by it is immutable.
 
 ```cpp
 // [cpp] bazel run //reference:const_ref
@@ -101,9 +103,13 @@ int main() {
 }
 ```
 
-编译会得到两个错误：一个是  `no viable overloaded '='` ，因为 `ref_a` 的类型是 `const A&` 而 `A` 默认的移动赋值函数的 `this` 并没有标记为 `const`；第二个错误也是差不多的原因：`A` 的方法 `auto data() -> int &` 的 `this` 并没有标记为 `const`.
+Try to compile this program, the compiler will complain against two errors: 
 
-我们再给 `A` 加一个 `const_data 方法`:
+The first is `no viable overloaded '='`, because the type of `ref_a` is `const A&` but there is no copy assignment operator defined as `auto A::operator=(const A&) const -> const A&;`. 
+
+The second error is almost because of the same reason: there is no method defined as `auto A::data() const -> const int&;`.
+
+We can define a method named `const_data` for `A`:
 
 ```cpp
 auto const_data() const -> const int & {
@@ -111,7 +117,9 @@ auto const_data() const -> const int & {
 }
 ```
 
-> 两个 `const` 分别标记 `this` 和返回引用的类型
+> The two `const` qualifiers are respectively immutable constraints for `this` and return type.
+
+Now we can only get an immutable reference of `_data`.
 
 我们现在可以也只能拿到 `_data` 的不可变引用
 
