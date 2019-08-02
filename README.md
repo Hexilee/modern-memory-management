@@ -2,7 +2,7 @@ The Rust programming language has been famous for its special,  modern memory ma
 
 Recently I start a project using Cpp, so I would like to summarize my concept about memory management strategy of Cpp, and compare it with that in Rust.
 
-You can also regard this blog as an introduction of Rust to developer who using Cpp.
+You can also regard this blog as an introduction of Rust to Cpp developer.
 
 This blog consists of four sections: Reference, Copy, Move and Smart Pointer.
 
@@ -121,8 +121,6 @@ auto const_data() const -> const int & {
 
 Now we can only get an immutable reference of `_data`.
 
-我们现在可以也只能拿到 `_data` 的不可变引用
-
 ```cpp
 // [cpp] bazel run //reference:const_ref_and_data
 
@@ -134,17 +132,17 @@ int main() {
 }
 ```
 
-这段代码会炸在赋值的地方。
+> compiling error at `ref_data = 1;`
 
 
-#### 没解决的问题
+#### Unresolved Problems
 
-Cpp 的引用固然在减少拷贝、控制可变性上做得很不错，但依旧存在两个明显的问题
+Lvalue references of Cpp does a good job at reducing copies and controlling immutability, however, there are still two obvious unresolved problems:
 
-- 引用可能比对象本身活得更长。
-- 可能同时持有对同一对象的多个可变引用，不能静态检查到潜在的数据竞争。
+- References may be still in using after destruction of referred object.
+- There may be multiple mutable references referred the same object, potential data race cannot be inspected by compiler.
 
-第一个问题的例子：
+Example of the first problem：
 
 ```cpp
 // [cpp] bazel run //reference:ref_dangling 
@@ -172,14 +170,14 @@ int main() {
 }
 ```
 
-打印出来的结果
+The print result:
 
 ```bash
 C(id=0) destructed
 id=-1840470160
 ```
 
-第二个问题的例子
+Example of the second problem:
 
 ```cpp
 // [cpp] bazel run //reference:data_race 
@@ -205,13 +203,13 @@ int main() {
 }
 ```
 
-结果随机 segmentation fault。
+segmentation fault at random。
 
 ### Rust
 
-#### 引用的生命期
+#### Lifetime of reference
 
-下面是 Rust 引用的用例
+A example of rust reference(`&T`):
 
 ```rust
 // [rust] cargo run --example mutable_ref 
@@ -242,13 +240,15 @@ fn main() {
 }
 ```
 
-> Rust 中变量对象绑定和引用默认都是不可变的，需要用 `mut` 限定词来使其可变，这与 Cpp 刚好相反。
+> In Rust, objects and references are both immutable by default, the `mut` qualifier is needed to get a mutable object or reference. This strategy is just opposite against that in Cpp.
 
-Rust 的引用同样也分可变引用和不可变引用，Cpp 中对可变引用的约束规则 Rust 也全部涵盖了；并且我们可以注意到，不同于 Cpp 中作为变量别名的引用，Rust 中的引用更像是指针，很多场景下都需要显式地取引用（`&`）和解引用（`*`）。
+All of the constraint rules mentioned in Cpp can be accordingly applied in Rust. As we can also notice, differing from Cpp, references in Rust are more similar to pointer instead of variable alias, ref(`&`) or deref(`*`) is needed at most cases.
 
-看完这个例子后我们继续刚才话题， 第一个问题，Rust 的引用可能比被引用对象本身活得更长吗？答案是不能（在不使用 Unsafe Rust 的情况下）。只要程序过了编译，Rust 能永远保证引用有效。
+Let's continue the previous topic, the two problems. 
 
-比如这个程序：
+The first problem, can references live longer than referred object? The answer is 'NO', never. Once your program passes compiling, validity of references is forever guaranteed by compiler.
+
+The compiler will refuse to compile program like this：
 
 ```rust
 // [rust] cargo run --example ref_dangling
@@ -263,7 +263,7 @@ fn main() {
 }
 ```
 
-编译失败 `missing lifetime specifier`，这是因为 Rust 的引用都有自己的生命期（lifetime）。在一般情况下，Rust 编译器能自己推导出生命期，比如当参数和返回值各只有一个生命期时，编译器会认为返回值的生命期与参数一致（返回引用依赖参数引用）：
+Compiling fails `missing lifetime specifier`, because each reference in Rust has its lifetime. Compiler can infer the lifetime in most cases, for instance, if a function inputs a reference and outputs a reference, compiler will infer the output reference relies on the input reference, so they have the same lifetime:
 
 ```rust
 // [rust] cargo run --example lifetime_infer
@@ -277,7 +277,7 @@ fn main() {
 }
 ```
 
-编译器会认为 `get_data` 返回的 `&i32` 依赖参数 `a`；同时对于 `data` 方法
+Compiler infers the returned `&i32` in `get_data` relies on parameter `a`；the `data` method is the same:
 
 ```rust
 struct A {
@@ -291,9 +291,9 @@ impl A {
 }
 ```
 
-返回的 `&i32` 依赖参数 `self`，所以编译器认为这个依赖链没问题，编译通过。
+The returned `&i32` should rely on parameter `&self`，and it does, so compiling successfully.
 
-但如果依赖链有问题的话，比如
+However, if the output reference does not rely on the input one, compiling will fail:
 
 ```rust
 // [rust] cargo run --example failed_infer
@@ -308,13 +308,15 @@ fn main() {
 }
 ```
 
-`get_data` 返回的 `&i32` 和参数 `a` 并没有关系，引用栈变量，拒绝编译。
+The returned `&i32` does not rely on the parameter `a`, compiling fails.
 
-当然对于更复杂的情况有其它的推导规则，有时也需要手动标记，有兴趣的读者可参考 Rust 的官方文档。
+For more complex conditions, compiler has other inference rules, sometimes lifetime marks are also needed. Interested readers can go to official website for specific documentation.
 
-#### 对可变引用的约束
+#### Constraints to mutable references
 
-Rust 的引用声明周期可以解决之前提到的第一个问题，那第二个问题呢？
+Lifetime system of Rust can resolve the first problem I mentioned, how about the second one? Can multiple mutable references referred the same object exist? Can data race escape from compiler inspecting?
+
+The answer is still 'NO', 
 
 我们前文说过 “Cpp 中对可变引用的约束规则 Rust 也全部涵盖了”，言外之意就是 Rust 对可变引用还有更多的约束：**一个可变引用不能与其他引用同时存在**。
 
